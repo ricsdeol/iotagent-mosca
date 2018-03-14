@@ -1,0 +1,16 @@
+{
+  "name": "dojot.iotagent.mosca",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Matheus Magalhaes",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "dojot-iotagent": "github:dojot/iotagent-nodejs",
+    "mosca": "^2.8.0",
+    "redis": "^2.8.0"
+  }
+}
