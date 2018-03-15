@@ -59,26 +59,32 @@ function parseClient(packet, client) {
 
   let result;
   if (client.user !== undefined) {
-    console.log('will use client.user as id source');
+    console.log('will attempt to use client.user as id source');
     result = fromString(client.user);
-    if (result)
+    if (result){
       return validate(result);
+    }
   }
 
   if (client.id !== undefined) {
-    console.log('will use client.id as id source');
+    console.log('will attempt to use client.id as id source');
     result = fromString(client.id);
-    if (result)
+    if (result){
       return validate(result);
+    }
   }
 
   // If we're here, it means that neither clientid nor username has been
   // properly set, so fallback to topic-based id scheme
   result = packet.topic.match(/^\/([^/]+)\/([^/]+)/)
   if (result){
-    console.log('will use topic as id source');
+    console.log('will attempt to use topic as id source');
     return validate({tenant: result[1], device: result[2]});
   }
+
+  return new Promise((resolve, reject) => {
+    reject(new Error("Unknown device - event missing id info"));
+  })
 }
 
 // fired when a message is received
