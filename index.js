@@ -50,7 +50,7 @@ function parseClient(packet, client) {
   function validate(idInfo) {
     return new Promise((resolve, reject) => {
       iota.getDevice(idInfo.device, idInfo.tenant).then((device) => {
-        resolve(idInfo, device);
+        resolve([idInfo, device]);
       }).catch((error) => {
         reject(new Error("Unknown device"));
       })
@@ -89,9 +89,11 @@ server.on('published', function(packet, client) {
     return;
   }
 
-  parseClient(packet, client).then((idInfo, device) => {
+  parseClient(packet, client).then((info) => {
     let data = packet.payload.toString();
     try {
+      const device = info[1];
+      const idInfo = info[0];
       data = JSON.parse(data);
       console.log('Published', packet.topic, data, client.id, client.user, client.passwd ? client.passwd.toString() : 'undefined');
       iota.updateAttrs(idInfo.device, idInfo.tenant, data, {});
