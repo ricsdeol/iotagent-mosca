@@ -101,6 +101,18 @@ server.on('published', function(packet, client) {
     try {
       const device = info[1];
       const idInfo = info[0];
+
+      for (let template in device.attrs) {
+        for (let attr of device.attrs[template]) {
+          if (attr.label == "topic") {
+            if (packet.topic !== attr.static_value) {
+              console.log(`Received message on invalid topic "${packet.topic}" for device. Ignoring`);
+              return;
+            }
+          }
+        }
+      }
+
       data = JSON.parse(data);
       console.log('Published', packet.topic, data, client.id, client.user, client.passwd ? client.passwd.toString() : 'undefined');
       iota.updateAttrs(idInfo.device, idInfo.tenant, data, {});
