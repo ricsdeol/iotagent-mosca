@@ -1,5 +1,6 @@
 var mosca = require('mosca');
 var iotalib = require('dojot-iotagent');
+var config = require('./config');
 
 var iota = new iotalib.IoTAgent();
 iota.init();
@@ -8,9 +9,9 @@ var mosca_backend = {
   type: 'redis',
   redis: require('redis'),
   db: 12,
-  port: 6379,
+  port: config.backend_port,
   return_buffers: true, // to handle binary payloads
-  host: "mosca-redis"
+  host: config.backend_host
 };
 
 var moscaSettings = {
@@ -18,7 +19,7 @@ var moscaSettings = {
   backend: mosca_backend,
   persistence: {
     factory: mosca.persistence.Redis,
-    host: 'mosca-redis'
+    host: mosca_backend.host
   }
 };
 
