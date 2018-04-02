@@ -40,7 +40,7 @@ As this is a npm-based project, building it is as simple as
     npm install
 
 
-If everything runs fine, the generated code should be in ``./build`` folder.
+And that's all.
 
 How to run
 ==========
