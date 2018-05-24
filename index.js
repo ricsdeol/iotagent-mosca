@@ -116,7 +116,29 @@ server.on('published', function(packet, client) {
 
       data = JSON.parse(data);
       console.log('Published', packet.topic, data, client.id, client.user, client.passwd ? client.passwd.toString() : 'undefined');
-      iota.updateAttrs(idInfo.device, idInfo.tenant, data, {});
+
+      let metadata;
+      if ("timestamp" in data) {
+        metadata = {
+          timestamp: 0
+        }
+        // If it is a number, just copy it. Probably Unix time.
+        if (typeof data.timestamp === "number") {
+          metadata.timestamp = data.timestamp;
+        } else {
+          // If it is a ISO string...
+          const parsed = Date.parse(data.timestamp);
+          if (!isNaN(parsed)) {
+            metadata.timestamp = parsed;
+          } else {
+            // Invalid timestamp.
+            metadata = {};
+          }
+        }
+      } else {
+        metadata = { };
+      }
+      iota.updateAttrs(idInfo.device, idInfo.tenant, data, metadata);
     } catch (e) {
       console.log('Payload is not valid json. Ignoring.', packet.payload.toString(), e);
     }
