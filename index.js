@@ -2,6 +2,10 @@ var mosca = require('mosca');
 var iotalib = require('dojot-iotagent');
 var config = require('./config');
 
+var SECURE_CERT = '/opt/mosca/certs/mosquitto.crt';
+var SECURE_KEY =  '/opt/mosca/certs/mosquitto.key';
+var CA_CERT = '/opt/mosca/certs/ca.crt';
+
 var iota = new iotalib.IoTAgent();
 iota.init();
 
@@ -15,11 +19,22 @@ var mosca_backend = {
 };
 
 var moscaSettings = {
-  port: 1883,
   backend: mosca_backend,
   persistence: {
     factory: mosca.persistence.Redis,
     host: mosca_backend.host
+  },
+  type : "mqtts", // important to only use mqtts, not mqtt
+  credentials : { // contains all security information
+    keyPath: SECURE_KEY,
+    certPath: SECURE_CERT,
+    caPaths : [ CA_CERT ],
+    requestCert : true, // enable requesting certificate from clients
+    rejectUnauthorized : true // only accept clients with valid certificate
+  },
+
+  secure: {
+    port: 8883
   }
 };
 
@@ -27,7 +42,7 @@ var server = new mosca.Server(moscaSettings);
 server.on('ready', setup);
 
 server.on('clientConnected', function(client) {
-  // console.log('client up', client.id, client.user, client.passwd);
+  console.log('client up', client.id, client.user, client.passwd);
   // TODO notify dojot that device is online
   // what about pings?
 });
