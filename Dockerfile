@@ -10,11 +10,14 @@ RUN apt-get update \
 && pip install requests kafka
 
 ADD ./*.json /opt/
-RUN npm install
-ADD . /opt/
 
 #Create dir for allocate tls auth files
 RUN mkdir -p /opt/mosca/certs/
+
+RUN npm install
+ADD . /opt/
+
+
 
 EXPOSE 8883
 EXPOSE 1883

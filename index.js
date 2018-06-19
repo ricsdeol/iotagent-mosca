@@ -9,33 +9,31 @@ var CA_CERT = '/opt/mosca/certs/ca.crt';
 var iota = new iotalib.IoTAgent();
 iota.init();
 
-var mosca_backend = {
-  type: 'redis',
-  redis: require('redis'),
-  db: 12,
-  port: config.backend_port,
-  return_buffers: true, // to handle binary payloads
-  host: config.backend_host
-};
+// var mosca_backend = {
+//   type: 'redis',
+//   redis: require('redis'),
+//   db: 12,
+//   port: config.backend_port,
+//   return_buffers: true, // to handle binary payloads
+//   host: config.backend_host
+// };
 
 var moscaSettings = {
-  backend: mosca_backend,
-  persistence: {
-    factory: mosca.persistence.Redis,
-    host: mosca_backend.host
-  },
-  type : "mqtts", // important to only use mqtts, not mqtt
-  credentials : { // contains all security information
+  logger: {
+    name: "test",
+    level: "trace" // gives you a detailed log output
+},
+type : "mqtts", // important to only use mqtts, not mqtt
+credentials : { // contains all security information
     keyPath: SECURE_KEY,
     certPath: SECURE_CERT,
     caPaths : [ CA_CERT ],
     requestCert : true, // enable requesting certificate from clients
     rejectUnauthorized : true // only accept clients with valid certificate
-  },
-
-  secure: {
-    port: 8883
-  }
+},
+secure : {
+    port : 8883  // 8883 is the standard mqtts port
+}
 };
 
 var server = new mosca.Server(moscaSettings);
@@ -144,13 +142,13 @@ server.on('published', function(packet, client) {
 function setup() {
   console.log('Mosca server is up and running');
 
-  server.authenticate = (client, username, password, callback) => {
-    console.log('will handle authentication request', username, password, client.id);
-    // TODO: check if given credentials are valid against cache
-    client.user = username;
-    client.passwd = password;
-    callback(null, true);
-  }
+  // server.authenticate = (client, username, password, callback) => {
+  //   console.log('will handle authentication request', username, password, client.id);
+  //   // TODO: check if given credentials are valid against cache
+  //   client.user = username;
+  //   client.passwd = password;
+  //   callback(null, true);
+  // }
 }
 
 iota.on('device.configure', (event) => {
