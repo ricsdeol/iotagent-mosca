@@ -143,13 +143,13 @@ server.on('published', function(packet, client) {
 function setup() {
   console.log('Mosca server is up and running');
 
-  server.authenticate = (client, username, password, callback) => {
-    console.log('will handle authentication request', username, password, client.id);
-    // TODO: check if given credentials are valid against cache
-    client.user = username;
-    client.passwd = password;
-    callback(null, true);
-  }
+  // server.authenticate = (client, username, password, callback) => {
+  //   console.log('will handle authentication request', username, password, client.id);
+  //   // TODO: check if given credentials are valid against cache
+  //   client.user = username;
+  //   client.passwd = password;
+  //   callback(null, true);
+  // }
 }
 
 iota.on('device.configure', (event) => {
