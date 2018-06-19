@@ -41,7 +41,7 @@ var server = new mosca.Server(moscaSettings);
 server.on('ready', setup);
 
 server.on('clientConnected', function(client) {
-  console.log('client up', client.id, client.user, client.passwd);
+  // console.log('client up', client.id, client.user, client.passwd);
   // TODO notify dojot that device is online
   // what about pings?
 });
@@ -143,13 +143,13 @@ server.on('published', function(packet, client) {
 function setup() {
   console.log('Mosca server is up and running');
 
-  // server.authenticate = (client, username, password, callback) => {
-  //   console.log('will handle authentication request', username, password, client.id);
-  //   // TODO: check if given credentials are valid against cache
-  //   client.user = username;
-  //   client.passwd = password;
-  //   callback(null, true);
-  // }
+  server.authenticate = (client, username, password, callback) => {
+    console.log('will handle authentication request', username, password, client.id);
+    // TODO: check if given credentials are valid against cache
+    client.user = username;
+    client.passwd = password;
+    callback(null, true);
+  }
 }
 
 iota.on('device.configure', (event) => {
