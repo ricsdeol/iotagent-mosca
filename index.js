@@ -26,15 +26,14 @@ var moscaSettings = {
   },
   type : "mqtts", // important to only use mqtts, not mqtt
   credentials : { // contains all security information
-    keyPath: SECURE_KEY,
-    certPath: SECURE_CERT,
-    caPaths : [ CA_CERT ],
-    requestCert : true, // enable requesting certificate from clients
-    rejectUnauthorized : true // only accept clients with valid certificate
+      keyPath: SECURE_KEY,
+      certPath: SECURE_CERT,
+      caPaths : [ CA_CERT ],
+      requestCert : true, // enable requesting certificate from clients
+      rejectUnauthorized : true // only accept clients with valid certificate
   },
-
-  secure: {
-    port: 8883
+  secure : {
+      port : 8883  // 8883 is the standard mqtts port
   }
 };
 
