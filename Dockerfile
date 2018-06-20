@@ -6,8 +6,10 @@ WORKDIR /opt
 RUN apt-get update && apt-get install libzmq-dev -y
 
 RUN apt-get update \
-	&& apt-get install -y python-openssl python-pip \
-&& pip install requests kafka
+	&& apt-get install  -y --no-install-recommends python-openssl python-pip \
+	&& pip install requests kafka\
+	&& apt-get clean \
+	&& rm -rf /var/lib/apt/lists/*
 
 ADD ./*.json /opt/
 

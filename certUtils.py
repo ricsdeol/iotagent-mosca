@@ -31,6 +31,14 @@ def saveCRT(filename, rawCRT):
 
 def generateCSR(CName, privateKeyFile, csrFileName, dnsname=[], ipaddr=[]):
     # based on https://github.com/cjcotton/python-csr
+
+
+    if dnsname is None:
+        dnsname = []
+
+    if ipaddr is None:
+        ipaddr = []
+
     ss = []
     for i in dnsname:
         ss.append("DNS: %s" % i)
@@ -71,8 +79,9 @@ def generateCSR(CName, privateKeyFile, csrFileName, dnsname=[], ipaddr=[]):
 def generatePrivateKey(keyFile, bitLen):
     key = crypto.PKey()
     key.generate_key(crypto.TYPE_RSA, bitLen)
-    with open(keyFile, "w") as keyFile:
-        keyFile.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, key))
+    key_file = None
+    with open(keyFile, "w") as key_file:
+        key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, key))
 
 
 # default header for HTTP requests
@@ -128,8 +137,9 @@ def createEJBCAUser(EJBCA_API_URL, CAName, CName, passwd,
 
 
 def signCert(EJBCA_API_URL, csrFile, CName, passwd):
-    with open(csrFile, "r") as csrFile:
-        csr = csrFile.read()
+    csr_file = None
+    with open(csrFile, "r") as csr_file:
+        csr = csr_file.read()
     cutDownCLR = (csr[csr.find('-----BEGIN CERTIFICATE REQUEST-----')
                   + len('-----BEGIN CERTIFICATE REQUEST-----'):
                   csr.find("-----END CERTIFICATE REQUEST-----")]
