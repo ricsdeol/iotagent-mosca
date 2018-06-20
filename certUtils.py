@@ -29,7 +29,7 @@ def saveCRT(filename, rawCRT):
         crtFile.write(crt)
 
 
-def generateCSR(CName, privateKeyFile, csrFileName, dnsname=[], ipaddr=[]):
+def generateCSR(CName, privateKeyFile, csrFileName, dnsname=None, ipaddr=None):
     # based on https://github.com/cjcotton/python-csr
 
 
