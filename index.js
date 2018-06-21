@@ -124,7 +124,12 @@ server.on('published', function(packet, client) {
         }
         // If it is a number, just copy it. Probably Unix time.
         if (typeof data.timestamp === "number") {
-          metadata.timestamp = data.timestamp;
+          if (!isNaN(data.timestamp)) {
+            metadata.timestamp = data.timestamp;
+          } else {
+            console.log("Received an invalid timestamp (NaN)");
+            metadata = {};
+          }
         } else {
           // If it is a ISO string...
           const parsed = Date.parse(data.timestamp);
