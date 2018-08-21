@@ -2,6 +2,21 @@ var mosca = require('mosca');
 var iotalib = require('dojot-iotagent');
 var config = require('./config');
 
+const client = require('prom-client');
+
+
+
+// Probe every 5th second.
+
+// client.collectDefaultMetrics({ register });
+const register = new client.Registry();
+const counter = new client.Counter({
+  name: 'nmessages',
+  help: 'number of received mqtt messages',
+  registers: [register]
+});
+
+
 var iota = new iotalib.IoTAgent();
 iota.init();
 
@@ -15,6 +30,21 @@ var mosca_backend = {
 };
 
 var moscaSettings = {};
+
+
+const express = require('express');
+const metricsServer = express();
+
+metricsServer.get('/metrics', (req, res) => {
+	res.set('Content-Type', register.contentType);
+	res.end(register.metrics());
+});
+
+// metricsServer.get('/metrics/counter', (req, res) => {
+// 	res.set('Content-Type', register.contentType);
+// 	res.end(register.getSingleMetricAsString('mqtt_messages'));
+// });
+metricsServer.listen(3000);
 
 if (config.mosca_tls === 'true') {
 
@@ -90,21 +120,21 @@ function parseClient(packet, client) {
   }
 
   let result;
-  if (client.user !== undefined) {
-    console.log('will attempt to use client.user as id source');
-    result = fromString(client.user);
-    if (result){
-      return validate(result);
-    }
-  }
+  // if (client.user !== undefined) {
+  //   console.log('will attempt to use client.user as id source');
+  //   result = fromString(client.user);
+  //   if (result){
+  //     return validate(result);
+  //   }
+  // }
 
-  if (client.id !== undefined) {
-    console.log('will attempt to use client.id as id source');
-    result = fromString(client.id);
-    if (result){
-      return validate(result);
-    }
-  }
+  // if (client.id !== undefined) {
+  //   console.log('will attempt to use client.id as id source');
+  //   result = fromString(client.id);
+  //   if (result){
+  //     return validate(result);
+  //   }
+  // }
 
   // If we're here, it means that neither clientid nor username has been
   // properly set, so fallback to topic-based id scheme
@@ -127,6 +157,9 @@ server.on('published', function(packet, client) {
     console.log('ignoring internal message', packet.topic, client);
     return;
   }
+
+  console.log("incrementing message counter")
+  counter.inc(); // Inc with 1
 
   parseClient(packet, client).then((info) => {
     let data = packet.payload.toString();

@@ -10,7 +10,9 @@
   "license": "GPL-3.0",
   "dependencies": {
     "dojot-iotagent": "github:dojot/iotagent-nodejs",
+    "express": "^4.16.3",
     "mosca": "^2.8.0",
+    "prom-client": "^11.1.1",
     "redis": "^2.8.0"
   }
 }
