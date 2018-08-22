@@ -15,7 +15,7 @@ iota.init();
 // is used as the cache's key.
 //
 // TODO: Replace the map by a list of connected device Ids?
-var cache = new Map(); 
+const cache = new Map(); 
 
 // Mosca Settings
 var moscaSettings = {};
@@ -121,19 +121,19 @@ function authenticate(client, username, password, callback) {
         return;
     }
     
-    // Condition 3: Device exists in dojot
-    iota.getDevice(ids.device, ids.tenant).then((device) => {
-      // add device to cache
-      cache.set(client.id, device);
-
-      //authorize client connection
-      callback(null, true);
-      console.log('Connection authorized for', client.id);
-    }).catch((error) => {
-      //reject client connection
-      callback(null, false);
-      console.log(`Connection rejected for ${client.id}. Device doesn\'t exist in dojot.`);
-    })
+  // Condition 3: Device exists in dojot
+  iota.getDevice(ids.device, ids.tenant).then((device) => {
+    // add device to cache
+    device.auto = false;
+    cache.set(client.id, device);
+    //authorize client connection
+    callback(null, true);
+    console.log('Connection authorized for', client.id);
+  }).catch((error) => {
+    //reject client connection
+    callback(null, false);
+    console.log(`Connection rejected for ${client.id}. Device doesn\'t exist in dojot.`);
+  })
 }
 
 // Function to authourize client to publish to
@@ -183,14 +183,12 @@ server.on('clientConnected', function(client) {
 // Fired when a client disconnects from mosca server
 server.on('clientDisconnected', function(client) {
   console.log('client down', client.id);  
-  cache.delete(client.id)
   //TODO: notify dojot that device is offline?
 });
 
 // Fired when a message is received by mosca server
 // (from device to dojot)
 server.on('published', function(packet, client) {
-
   // ignore meta (internal) topics
   if ((packet.topic.split('/')[0] == '$SYS') || 
       (client === undefined) || (client === null)) {
@@ -279,14 +277,36 @@ iota.on('device.configure', (event) => {
 
 });
 
+const updateCacheDevice = (event) => {
+  const id = event.data.id;
+  const tenant = event.meta.service;
+  const device = cache.get(`${tenant}/${id}`);
+  if (device) {
+    for (const key in event.data) {
+      if (device.hasOwnProperty(key)) {
+        device[key] = event.data[key];
+      }
+    }
+    cache.set(`${tenant}/${id}`, device);
+  } else {
+    console.log("Device not exist in cache ..");
+  }
+}
+
+const deleteCacheDevice = (event) => {
+  const id = event.data.id;
+  const tenant = event.meta.service;
+  cache.delete(`${tenant}/${id}`);
+}
+
 // Fired when a device.update event is received
 iota.on('device.update', (event) => {
   console.log('Got device.update event from Device Manager', event);
-  //TODO: update cache
+    updateCacheDevice(event);
 });
 
 // Fired when a device.remove event is received
 iota.on('device.remove', (event) => {
   console.log('Got device.remove event from Device Manager', event);
-  //TODO: close client connection
+  deleteCacheDevice(event);
 });
