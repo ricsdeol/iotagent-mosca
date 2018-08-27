@@ -23,4 +23,5 @@ ADD . /opt/
 
 EXPOSE 8883
 EXPOSE 1883
+EXPOSE 3000
 CMD ["/opt/entrypoint.sh"]

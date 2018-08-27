@@ -4,18 +4,41 @@ var config = require('./config');
 
 const client = require('prom-client');
 
+const express = require('express');
+
+
 
 
 // Probe every 5th second.
 
 // client.collectDefaultMetrics({ register });
-const register = new client.Registry();
-const counter = new client.Counter({
-  name: 'nmessages',
-  help: 'number of received mqtt messages',
-  registers: [register]
-});
 
+class Metrics {
+  constructor() {
+    this.register = new client.Registry();
+    this.totalMessages = new client.Counter({
+      name: "totalMessages",
+      label: "",
+      help: "number of received mqtt messages",
+      registers: [this.register]
+    
+    });
+    this.counters = new client.Counter({
+      name: "messages",
+      labelNames: ["tenant", "device", "type"],
+      help: "number of messages from a device in a tenant",
+      registers: [this.register]
+    });
+    this.metricsServer = express();
+    this.metricsServer.get('/metrics', (req, res) => {
+      res.set('Content-Type', this.register.contentType);
+      res.end(this.register.metrics());
+    });
+    this.metricsServer.listen(3000);
+  }
+}
+
+let metrics = new Metrics();
 
 var iota = new iotalib.IoTAgent();
 iota.init();
@@ -32,19 +55,13 @@ var mosca_backend = {
 var moscaSettings = {};
 
 
-const express = require('express');
-const metricsServer = express();
 
-metricsServer.get('/metrics', (req, res) => {
-	res.set('Content-Type', register.contentType);
-	res.end(register.metrics());
-});
 
 // metricsServer.get('/metrics/counter', (req, res) => {
 // 	res.set('Content-Type', register.contentType);
 // 	res.end(register.getSingleMetricAsString('mqtt_messages'));
 // });
-metricsServer.listen(3000);
+
 
 if (config.mosca_tls === 'true') {
 
@@ -159,7 +176,7 @@ server.on('published', function(packet, client) {
   }
 
   console.log("incrementing message counter")
-  counter.inc(); // Inc with 1
+  // totalMessages.inc(); // Inc with 1
 
   parseClient(packet, client).then((info) => {
     let data = packet.payload.toString();
@@ -207,6 +224,8 @@ server.on('published', function(packet, client) {
       } else {
         metadata = { };
       }
+      metrics.counters.labels(idInfo.tenant, idInfo.device, "uplink").inc();
+
       iota.updateAttrs(idInfo.device, idInfo.tenant, data, metadata);
     } catch (e) {
       console.log('Payload is not valid json. Ignoring.', packet.payload.toString(), e);
@@ -251,6 +270,7 @@ iota.on('device.configure', (event) => {
     }
 
     console.log('will publish', message)
+    metrics.counters.labels(event.meta.service, device_id, "downlink").inc();
     server.publish(message, function() {console.log('message out')});
   })
 })
