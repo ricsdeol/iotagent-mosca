@@ -1,8 +1,8 @@
 #!/usr/bin/python
-# this script makes the initial configuration to use TLS with mosquitto
-# it generates the mosquitto key pair
-# and retrieves a certificate and CRL from CA
-# if the configuration has already been done before, this script does nothing
+# This script makes the initial configuration to use TLS with mosca.
+# It generates the mosca key-pair
+# and retrieves a certificate and CRL from CA.
+# If the configuration has already been done, this script does nothing!
 
 import conf
 import os
@@ -14,38 +14,38 @@ import requests
 
 
 def generateKeys():
-    if not os.path.isfile(conf.certsDir + 'mosquitto.key'):
-        certUtils.generatePrivateKey(conf.certsDir + "/mosquitto.key",
+    if not os.path.isfile(conf.certsDir + 'mosca.key'):
+        certUtils.generatePrivateKey(conf.certsDir + "/mosca.key",
                                      conf.keyLength)
-        print "mosquitto key pair created"
+        print "mosca key-pair created"
 
 
 def generateCSR():
-    if not os.path.isfile(conf.certsDir + "/mosquitto.csr"):
-        certUtils.generateCSR(CName='mosquitto',
-                              privateKeyFile=conf.certsDir + "/mosquitto.key",
-                              csrFileName=conf.certsDir + "/mosquitto.csr",
-                              dnsname=['mqtt', 'mosquitto', 'localhost'])
+    if not os.path.isfile(conf.certsDir + "/mosca.csr"):
+        certUtils.generateCSR(CName='mosca',
+                              privateKeyFile=conf.certsDir + "/mosca.key",
+                              csrFileName=conf.certsDir + "/mosca.csr",
+                              dnsname=['mqtt', 'mosca', 'localhost'])
 
 
 def askCertSign():
-    if not os.path.isfile(conf.certsDir + "/mosquitto.crt"):
+    if not os.path.isfile(conf.certsDir + "/mosca.crt"):
         passwd = binascii.b2a_hex(os.urandom(16))
         try:
             certUtils.createEJBCAUser(conf.EJBCA_API_URL, conf.CAName,
-                                      "mosquitto", passwd)
+                                      "mosca", passwd)
         except certUtils.EJBCARESTException as err:
             print("Cant create EJBCA user. Error: " + err.message)
             exit(-1)
         try:
             cert = certUtils.signCert(conf.EJBCA_API_URL,
-                                      conf.certsDir + "/mosquitto.csr",
-                                      "mosquitto", passwd)
+                                      conf.certsDir + "/mosca.csr",
+                                      "mosca", passwd)
         except certUtils.EJBCARESTException as err:
             print("Cant sign the CRT. EJBCA-REST return code: " + err.message)
             exit(-1)
-        certUtils.saveCRT(conf.certsDir + "/mosquitto.crt", cert)
-        print("mosquitto certificate signed")
+        certUtils.saveCRT(conf.certsDir + "/mosca.crt", cert)
+        print("mosca certificate signed")
 
 
 def retrieveCAChain():

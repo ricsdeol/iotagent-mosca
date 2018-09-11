@@ -28,13 +28,7 @@ var mosca_backend = {
 };
 
 // MQTT with TLS and client certificate
-if (config.mosca_tls === 'true') {
-
-  // TODO: move to config.js
-  // TODO: change names from mosquitto* to mosca*
-  var SECURE_CERT = '/opt/mosca/certs/mosquitto.crt';
-  var SECURE_KEY = '/opt/mosca/certs/mosquitto.key';
-  var CA_CERT = '/opt/mosca/certs/ca.crt';
+if (config.mosca_tls.enabled === 'true') {
 
   moscaSettings = {
     backend: mosca_backend,
@@ -45,9 +39,9 @@ if (config.mosca_tls === 'true') {
     type: "mqtts", // important to only use mqtts, not mqtt
     credentials:
     { // contains all security information
-      keyPath: SECURE_KEY,
-      certPath: SECURE_CERT,
-      caPaths: [CA_CERT],
+      keyPath: config.mosca_tls.key,
+      certPath: config.mosca_tls.cert,
+      caPaths: [config.mosca_tls.ca],
       requestCert: true, // enable requesting certificate from clients
       rejectUnauthorized: true // only accept clients with valid certificate
     },
@@ -110,7 +104,7 @@ function authenticate(client, username, password, callback) {
   // Condition 2: Client certificate belongs to the
   // device identified in the clientId
   // TODO: the clientId must contain the tenant too!
-  if (config.mosca_tls === 'true') {
+  if (config.mosca_tls.enabled === 'true') {
     clientCertificate = client.connection.stream.getPeerCertificate();
     if (!clientCertificate.hasOwnProperty('subject') ||
       !clientCertificate.subject.hasOwnProperty('CN') ||
