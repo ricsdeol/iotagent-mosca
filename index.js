@@ -181,7 +181,8 @@ server.on('clientConnected', function (client) {
 // Fired when a client disconnects from mosca server
 server.on('clientDisconnected', function (client) {
   console.log('client down', client.id);
-  //TODO: notify dojot that device is offline?
+  // delete device from cache
+  cache.delete(client.id);
 });
 
 // Fired when a message is received by mosca server
