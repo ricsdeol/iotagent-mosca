@@ -11,10 +11,8 @@ iota.init();
 // Once a MQTT client is authorized by the server, 
 // its corresponding dojot device is added to the cache
 // and kept there while the client is connected.
-// The clientId which MUST match the pattern tenant/deviceId
+// The clientId which MUST match the pattern tenant:deviceId
 // is used as the cache's key.
-//
-// TODO: Replace the map by a list of connected device Ids?
 const cache = new Map(); 
 
 // Mosca Settings
@@ -85,10 +83,10 @@ server.on('ready', () => {
 })
 
 // Helper Function to parse MQTT clientId
-// (pattern: clientId = tenant/deviceId)
+// (pattern: clientId = tenant:deviceId)
 function parseClientId(clientId) {
   if (clientId && (typeof clientId === 'string')) {
-    let parsedData = clientId.match(/^(\w+)\/(\w+)$/);
+    let parsedData = clientId.match(/^(\w+):(\w+)$/);
     if (parsedData) {
       return { tenant: parsedData[1], device: parsedData[2] };
     }
@@ -99,7 +97,7 @@ function parseClientId(clientId) {
 function authenticate(client, username, password, callback) {
   console.log('Authenticating MQTT client', client.id);
 
-  // Condition 1: client.id follows the pattern tenant/deviceId
+  // Condition 1: client.id follows the pattern tenant:deviceId
   // Get tenant and deviceId from client.id
   let ids = parseClientId(client.id);
   if (!ids) {
@@ -146,13 +144,6 @@ function authorizePublish(client, topic, payload, callback) {
   let ids = parseClientId(client.id);
   let expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
 
-  // Once we accept only topics without starting slashes (such as admin/efac/attrs)
-  // this code adds backward compatibility.
-  // if (topic.startsWith('/')) {
-  //   console.error('deprecated - topic should not starts with slash.');
-  //   expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
-  // }
-
   console.log(`Expected topic is ${expectedTopic}`);
   console.log(`Device published on topic ${topic}`);
   if (topic === expectedTopic) {
@@ -174,13 +165,6 @@ function authorizeSubscribe(client, topic, callback) {
 
   let ids = parseClientId(client.id);
   let expectedTopic = `/${ids.tenant}/${ids.device}/config`;
-
-  // Once we accept only topics without starting slashes (such as admin/efac/attrs)
-  // this code adds backward compatibility.
-  // if (topic.startsWith('/')) {
-  //   console.error('deprecated - topic should not starts with slash.');
-  //   expectedTopic = `/${ids.tenant}/${ids.device}/config`;
-  // } 
 
   if (topic === expectedTopic) {
     // authorize
@@ -275,7 +259,7 @@ iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
   let topic = `/${tenant}/${deviceId}/config`;
 
   // device
-  let cacheEntry = cache.get(`${tenant}/${deviceId}`);
+  let cacheEntry = cache.get(`${tenant}:${deviceId}`);
   if (cacheEntry) {
     let message = {
       'topic': topic,
@@ -300,13 +284,13 @@ iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
 const deleteAndDisconnectCacheDevice = (event) => {
   const id = event.data.id;
   const tenant = event.meta.service;
-  let cacheEntry = cache.get(`${tenant}/${id}`);
+  let cacheEntry = cache.get(`${tenant}:${id}`);
   if (cacheEntry) {
-    let { client } = cache.get(`${tenant}/${id}`);
+    let { client } = cache.get(`${tenant}:${id}`);
     if (client) {
       client.close();
     }
-    cache.delete(`${tenant}/${id}`);
+    cache.delete(`${tenant}:${id}`);
   }
 }
 
