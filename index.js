@@ -127,7 +127,7 @@ function authenticate(client, username, password, callback) {
   // Condition 3: Device exists in dojot
   iota.getDevice(ids.device, ids.tenant).then((device) => {
     // add device to cache
-    cache.set(client.id, device);
+    cache.set(client.id, { device, client });
     //authorize client connection
     callback(null, true);
     console.log('Connection authorized for', client.id);
@@ -144,12 +144,14 @@ function authorizePublish(client, topic, payload, callback) {
   console.log(`Authorizing MQTT client ${client.id} to publish to ${topic}`);
 
   let ids = parseClientId(client.id);
-  let expectedTopic = `${ids.tenant}/${ids.device}/attrs`;
+  let expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
 
-  if (topic.startsWith('/')) {
-    console.error('depreciated - topic should not starts with slash.');
-    expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
-  }
+  // Once we accept only topics without starting slashes (such as admin/efac/attrs)
+  // this code adds backward compatibility.
+  // if (topic.startsWith('/')) {
+  //   console.error('deprecated - topic should not starts with slash.');
+  //   expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
+  // }
 
   if (topic === expectedTopic) {
     // authorize
@@ -169,12 +171,14 @@ function authorizeSubscribe(client, topic, callback) {
   console.log(`Authorizing client ${client.id} to subscribe to ${topic}`);
 
   let ids = parseClientId(client.id);
-  let expectedTopic = `${ids.tenant}/${ids.device}/config`;
+  let expectedTopic = `/${ids.tenant}/${ids.device}/config`;
 
-  if (topic.startsWith('/')) {
-    console.error('depreciated - topic should not starts with slash.');
-    expectedTopic = `/${ids.tenant}/${ids.device}/config`;
-  } 
+  // Once we accept only topics without starting slashes (such as admin/efac/attrs)
+  // this code adds backward compatibility.
+  // if (topic.startsWith('/')) {
+  //   console.error('deprecated - topic should not starts with slash.');
+  //   expectedTopic = `/${ids.tenant}/${ids.device}/config`;
+  // } 
 
   if (topic === expectedTopic) {
     // authorize
@@ -263,10 +267,13 @@ iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
   delete event.data.id;
 
   // topic
-  let topic = `${tenant}/${deviceId}/config`;
+  // For now, we are still using slashes at the beginning. In the future, 
+  // this will be removed (and topics will look like 'admin/efac/config')
+  // let topic = `${tenant}/${deviceId}/config`;
+  let topic = `/${tenant}/${deviceId}/config`;
 
   // device
-  let device = cache.get(`${tenant}/${deviceId}`);
+  let { device } = cache.get(`${tenant}/${deviceId}`);
   if (device) {
     let message = {
       'topic': topic,
@@ -290,23 +297,30 @@ iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
 
 const updateCacheDevice = (event, id, tenant) => {
 
-  const device = cache.get(`${tenant}/${id}`);
+  const { device, client } = cache.get(`${tenant}/${id}`);
   if (device) {
     for (const key in event.data) {
       if (device.hasOwnProperty(key)) {
         device[key] = event.data[key];
       }
     }
-    cache.set(`${tenant}/${id}`, device);
+    cache.set(`${tenant}/${id}`, { device, client });
   } else {
     console.log("Device not exist in cache ..");
   }
 }
 
-const deleteCacheDevice = (event) => {
+const deleteAndDisconnectCacheDevice = (event) => {
   const id = event.data.id;
   const tenant = event.meta.service;
-  cache.delete(`${tenant}/${id}`);
+  let cacheEntry = cache.get(`${tenant}/${id}`);
+  if (cacheEntry) {
+    let { client } = cache.get(`${tenant}/${id}`);
+    if (client) {
+      client.close();
+    }
+    cache.delete(`${tenant}/${id}`);
+  }
 }
 
 // Fired when a device.update event is received
@@ -325,5 +339,5 @@ iota.messenger.on('iotagent.device', 'device.update', (tenant, event) => {
 // // Fired when a device.remove event is received
 iota.messenger.on('iotagent.device', 'device.remove', (tenant, event) => {
   console.log('Got device.remove event from Device Manager', tenant);
-  deleteCacheDevice(event);
+  deleteAndDisconnectCacheDevice(event);
 });
