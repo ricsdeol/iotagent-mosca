@@ -9,7 +9,7 @@
   "author": "Matheus Magalhaes",
   "license": "GPL-3.0",
   "dependencies": {
-    "dojot-iotagent": "github:dojot/iotagent-nodejs",
+    "@dojot/iotagent-nodejs": "2.0.0-alpha.3",
     "mosca": "^2.8.0",
     "redis": "^2.8.0"
   }

@@ -1,9 +1,24 @@
 var mosca = require('mosca');
-var iotalib = require('dojot-iotagent');
+var iotalib = require('@dojot/iotagent-nodejs');
 var config = require('./config');
 
+// Base iot-agent
 var iota = new iotalib.IoTAgent();
 iota.init();
+
+// Local device cache
+//
+// Once a MQTT client is authorized by the server, 
+// its corresponding dojot device is added to the cache
+// and kept there while the client is connected.
+// The clientId which MUST match the pattern tenant/deviceId
+// is used as the cache's key.
+//
+// TODO: Replace the map by a list of connected device Ids?
+const cache = new Map(); 
+
+// Mosca Settings
+var moscaSettings = {};
 
 var mosca_backend = {
   type: 'redis',
@@ -14,36 +29,38 @@ var mosca_backend = {
   host: config.backend_host
 };
 
-var moscaSettings = {};
-
+// MQTT with TLS and client certificate
 if (config.mosca_tls === 'true') {
 
+  // TODO: move to config.js
+  // TODO: change names from mosquitto* to mosca*
   var SECURE_CERT = '/opt/mosca/certs/mosquitto.crt';
-  var SECURE_KEY =  '/opt/mosca/certs/mosquitto.key';
+  var SECURE_KEY = '/opt/mosca/certs/mosquitto.key';
   var CA_CERT = '/opt/mosca/certs/ca.crt';
 
-  //Mosca with TLS
   moscaSettings = {
     backend: mosca_backend,
     persistence: {
       factory: mosca.persistence.Redis,
       host: mosca_backend.host
     },
-    type : "mqtts", // important to only use mqtts, not mqtt
-    credentials :
+    type: "mqtts", // important to only use mqtts, not mqtt
+    credentials:
     { // contains all security information
-        keyPath: SECURE_KEY,
-        certPath: SECURE_CERT,
-        caPaths : [ CA_CERT ],
-        requestCert : true, // enable requesting certificate from clients
-        rejectUnauthorized : true // only accept clients with valid certificate
+      keyPath: SECURE_KEY,
+      certPath: SECURE_CERT,
+      caPaths: [CA_CERT],
+      requestCert: true, // enable requesting certificate from clients
+      rejectUnauthorized: true // only accept clients with valid certificate
     },
-    secure : {
-        port : 8883  // 8883 is the standard mqtts port
+    secure: {
+      port: 8883  // 8883 is the standard mqtts port
     }
-  }; 
-} else {
-  //Without TLS
+  };
+}
+// MQTT without TLS 
+// (should only be used for debugging purposes or in a private environment)
+else {
   moscaSettings = {
     port: 1883,
     backend: mosca_backend,
@@ -55,169 +72,246 @@ if (config.mosca_tls === 'true') {
 }
 
 var server = new mosca.Server(moscaSettings);
-server.on('ready', setup);
 
-server.on('clientConnected', function(client) {
-  // console.log('client up', client.id, client.user, client.passwd);
-  // TODO notify dojot that device is online
-  // what about pings?
-});
+// Fired when mosca server is ready
+server.on('ready', () => {
+  console.log('Mosca server is up and running');
 
-server.on('clientDisconnected', function(client) {
-  // console.log('client down', client.id, client.user, client.passwd);
-  // TODO notify dojot that device is offline
-  // what about pings?
-});
+  // callbacks
+  server.authenticate = authenticate;
+  // Always check whether device is doing the right thing.
+  server.authorizePublish = authorizePublish;
+  server.authorizeSubscribe = authorizeSubscribe;
+})
 
-function parseClient(packet, client) {
-  function fromString(clientid) {
-    if (clientid && (typeof clientid == 'string')){
-      let data = clientid.match(/^(.*):(.*)$/);
-      if (data) {
-        return { tenant: data[1], device: data[2] };
-      }
+// Helper Function to parse MQTT clientId
+// (pattern: clientId = tenant/deviceId)
+function parseClientId(clientId) {
+  if (clientId && (typeof clientId === 'string')) {
+    let parsedData = clientId.match(/^(\w+)\/(\w+)$/);
+    if (parsedData) {
+      return { tenant: parsedData[1], device: parsedData[2] };
+    }
+  }
+}
+
+// Function to authenticate the MQTT client 
+function authenticate(client, username, password, callback) {
+  console.log('Authenticating MQTT client', client.id);
+
+  // Condition 1: client.id follows the pattern tenant/deviceId
+  // Get tenant and deviceId from client.id
+  let ids = parseClientId(client.id);
+  if (!ids) {
+    //reject client connection
+    callback(null, false);
+    console.log(`Connection rejected for ${client.id}. Invalid clientId.`);
+    return;
+  }
+
+  // Condition 2: Client certificate belongs to the
+  // device identified in the clientId
+  // TODO: the clientId must contain the tenant too!
+  if (config.mosca_tls === 'true') {
+    clientCertificate = client.connection.stream.getPeerCertificate();
+    if (!clientCertificate.hasOwnProperty('subject') ||
+      !clientCertificate.subject.hasOwnProperty('CN') ||
+      clientCertificate.subject.CN !== ids.device) {
+      //reject client connection
+      callback(null, false);
+      console.log(`Connection rejected for ${client.id}. Invalid client certificate.`);
+      return;
     }
   }
 
-  function validate(idInfo) {
-    return new Promise((resolve, reject) => {
-      iota.getDevice(idInfo.device, idInfo.tenant).then((device) => {
-        resolve([idInfo, device]);
-      }).catch((error) => {
-        reject(new Error("Unknown device"));
-      })
-    });
-  }
-
-  let result;
-  if (client.user !== undefined) {
-    console.log('will attempt to use client.user as id source');
-    result = fromString(client.user);
-    if (result){
-      return validate(result);
-    }
-  }
-
-  if (client.id !== undefined) {
-    console.log('will attempt to use client.id as id source');
-    result = fromString(client.id);
-    if (result){
-      return validate(result);
-    }
-  }
-
-  // If we're here, it means that neither clientid nor username has been
-  // properly set, so fallback to topic-based id scheme
-  result = packet.topic.match(/^\/([^/]+)\/([^/]+)/)
-  if (result){
-    console.log('will attempt to use topic as id source');
-    return validate({tenant: result[1], device: result[2]});
-  }
-
-  return new Promise((resolve, reject) => {
-    reject(new Error("Unknown device - event missing id info"));
+  // Condition 3: Device exists in dojot
+  iota.getDevice(ids.device, ids.tenant).then((device) => {
+    // add device to cache
+    cache.set(client.id, { client });
+    //authorize client connection
+    callback(null, true);
+    console.log('Connection authorized for', client.id);
+  }).catch((error) => {
+    //reject client connection
+    callback(null, false);
+    console.log(`Connection rejected for ${client.id}. Device doesn't exist in dojot.`);
   })
 }
 
-// fired when a message is received
-server.on('published', function(packet, client) {
+// Function to authourize client to publish to
+// topic: {tenant}/{deviceId}/attrs
+function authorizePublish(client, topic, payload, callback) {
+  console.log(`Authorizing MQTT client ${client.id} to publish to ${topic}`);
+
+  let ids = parseClientId(client.id);
+  let expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
+
+  // Once we accept only topics without starting slashes (such as admin/efac/attrs)
+  // this code adds backward compatibility.
+  // if (topic.startsWith('/')) {
+  //   console.error('deprecated - topic should not starts with slash.');
+  //   expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
+  // }
+
+  console.log(`Expected topic is ${expectedTopic}`);
+  console.log(`Device published on topic ${topic}`);
+  if (topic === expectedTopic) {
+    // authorize
+    callback(null, true);
+    console.log(`Authorized client ${client.id} to publish to topic ${topic}`);
+    return;
+  }
+
+  //reject
+  callback(null, false);
+  console.log(`Rejected client ${client.id} to publish to topic ${topic}`);
+}
+
+// Function to authorize client to subscribe to
+// topic: {tenant}/{deviceId}/config
+function authorizeSubscribe(client, topic, callback) {
+  console.log(`Authorizing client ${client.id} to subscribe to ${topic}`);
+
+  let ids = parseClientId(client.id);
+  let expectedTopic = `/${ids.tenant}/${ids.device}/config`;
+
+  // Once we accept only topics without starting slashes (such as admin/efac/attrs)
+  // this code adds backward compatibility.
+  // if (topic.startsWith('/')) {
+  //   console.error('deprecated - topic should not starts with slash.');
+  //   expectedTopic = `/${ids.tenant}/${ids.device}/config`;
+  // } 
+
+  if (topic === expectedTopic) {
+    // authorize
+    callback(null, true);
+    console.log(`Authorized client ${client.id} to subscribe to topic ${topic}`);
+    return;
+  }
+
+  //reject
+  callback(null, false);
+  console.log(`Rejected client ${client.id} to subscribe to topic ${topic}`);
+}
+
+// Fired when a client connects to mosca server
+server.on('clientConnected', function (client) {
+  console.log('client up', client.id);
+  // TODO: notify dojot that device is online?
+});
+
+// Fired when a client disconnects from mosca server
+server.on('clientDisconnected', function (client) {
+  console.log('client down', client.id);
+  //TODO: notify dojot that device is offline?
+});
+
+// Fired when a message is received by mosca server
+// (from device to dojot)
+server.on('published', function (packet, client) {
 
   // ignore meta (internal) topics
-  if ((packet.topic.split('/')[0] == '$SYS') || (client === undefined) || (client === null)) {
+  if ((packet.topic.split('/')[0] == '$SYS') ||
+    (client === undefined) || (client === null)) {
     console.log('ignoring internal message', packet.topic, client);
     return;
   }
 
-  parseClient(packet, client).then((info) => {
-    let data = packet.payload.toString();
-    try {
-      const device = info[1];
-      const idInfo = info[0];
+  // handle packet
+  let data;
+  try {
+    data = JSON.parse(packet.payload.toString());
+  }
+  catch (e) {
+    console.log('Payload is not valid JSON. Ignoring.', packet.payload.toString(), e);
+  }
 
-      for (let template in device.attrs) {
-        for (let attr of device.attrs[template]) {
-          if (attr.label == "topic") {
-            if (packet.topic !== attr.static_value) {
-              console.log(`Received message on invalid topic "${packet.topic}" for device. Ignoring`);
-              return;
-            }
-          }
-        }
+  console.log('Published', packet.topic, data, client.id);
+
+  //TODO: support only ISO string???
+  let metadata = {};
+  if ("timestamp" in data) {
+    metadata = { timestamp: 0 };
+    // If it is a number, just copy it. Probably Unix time.
+    if (typeof data.timestamp === "number") {
+      if (!isNaN(data.timestamp)) {
+        metadata.timestamp = data.timestamp;
       }
-
-      data = JSON.parse(data);
-      console.log('Published', packet.topic, data, client.id, client.user, client.passwd ? client.passwd.toString() : 'undefined');
-
-      let metadata;
-      if ("timestamp" in data) {
-        metadata = {
-          timestamp: 0
-        }
-        // If it is a number, just copy it. Probably Unix time.
-        if (typeof data.timestamp === "number") {
-          if (!isNaN(data.timestamp)) {
-            metadata.timestamp = data.timestamp;
-          } else {
-            console.log("Received an invalid timestamp (NaN)");
-            metadata = {};
-          }
-        } else {
-          // If it is a ISO string...
-          const parsed = Date.parse(data.timestamp);
-          if (!isNaN(parsed)) {
-            metadata.timestamp = parsed;
-          } else {
-            // Invalid timestamp.
-            metadata = {};
-          }
-        }
-      } else {
-        metadata = { };
+      else {
+        console.log("Received an invalid timestamp (NaN)");
+        metadata = {};
       }
-      iota.updateAttrs(idInfo.device, idInfo.tenant, data, metadata);
-    } catch (e) {
-      console.log('Payload is not valid json. Ignoring.', packet.payload.toString(), e);
     }
-  }).catch((error) => {
-    console.error("Failed to identify device which originated the event. Ignoring. (clientid: %s, username: %s, topic: %s)", client.id, client.user, packet.topic);
-  })
+    else {
+      // If it is a ISO string...
+      const parsed = Date.parse(data.timestamp);
+      if (!isNaN(parsed)) {
+        metadata.timestamp = parsed;
+      }
+      else {
+        // Invalid timestamp.
+        metadata = {};
+      }
+    }
+  }
+  //send data to dojot broker
+  let ids = parseClientId(client.id);
+  iota.updateAttrs(ids.device, ids.tenant, data, metadata);
 });
 
-// fired when the mqtt server is ready
-function setup() {
-  console.log('Mosca server is up and running');
+// Fired when a device.configure event is received
+// (from dojot to device)
+iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
+  console.log('Got configure event from Device Manager', event)
 
-  server.authenticate = (client, username, password, callback) => {
-    console.log('will handle authentication request', username, password, client.id);
-    // TODO: check if given credentials are valid against cache
-    client.user = username;
-    client.passwd = password;
-    callback(null, true);
+  // device id
+  let deviceId = event.data.id;
+  delete event.data.id;
+
+  // topic
+  // For now, we are still using slashes at the beginning. In the future, 
+  // this will be removed (and topics will look like 'admin/efac/config')
+  // let topic = `${tenant}/${deviceId}/config`;
+  let topic = `/${tenant}/${deviceId}/config`;
+
+  // device
+  let cacheEntry = cache.get(`${tenant}/${deviceId}`);
+  if (cacheEntry) {
+    let message = {
+      'topic': topic,
+      'payload': JSON.stringify(event.data.attrs),
+      'qos': 0,
+      'retain': false
+    };
+
+    // send data to device
+    console.log('Publishing', message)
+    server.publish(message, () => { console.log('Message out!!') });
+
+    // TODO: send message/state(=sent) to history
+  }
+  else {
+    console.log(`Discading event because device is disconnected`);
+    // TODO: send message/state(=discarded) to history
+  }
+
+});
+
+const deleteAndDisconnectCacheDevice = (event) => {
+  const id = event.data.id;
+  const tenant = event.meta.service;
+  let cacheEntry = cache.get(`${tenant}/${id}`);
+  if (cacheEntry) {
+    let { client } = cache.get(`${tenant}/${id}`);
+    if (client) {
+      client.close();
+    }
+    cache.delete(`${tenant}/${id}`);
   }
 }
 
-iota.on('device.configure', (event) => {
-  console.log('got configure event')
-  let device_id = event.data.id;
-  delete event.data.id;
-  iota.getDevice(device_id, event.meta.service).then((device) => {
-    let topic = `/${event.meta.service}/${device_id}/config`;
-    for (template in device.attrs){
-      for (attr of device.attrs[template]){
-        if ((attr.label == 'topic-config') && (attr.type == 'meta')) {
-          topic = attr.static_value;
-        }
-      }
-    }
-
-    let message = {
-      'topic': topic,
-      'payload': JSON.stringify(event.data),
-      'qos': 0,
-      'retain': false
-    }
-
-    console.log('will publish', message)
-    server.publish(message, function() {console.log('message out')});
-  })
-})
+// // Fired when a device.remove event is received
+iota.messenger.on('iotagent.device', 'device.remove', (tenant, event) => {
+  console.log('Got device.remove event from Device Manager', tenant);
+  deleteAndDisconnectCacheDevice(event);
+});
