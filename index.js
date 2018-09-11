@@ -134,7 +134,7 @@ function authenticate(client, username, password, callback) {
   }).catch((error) => {
     //reject client connection
     callback(null, false);
-    console.log(`Connection rejected for ${client.id}. Device doesn\'t exist in dojot.`);
+    console.log(`Connection rejected for ${client.id}. Device doesn't exist in dojot.`);
   })
 }
 
