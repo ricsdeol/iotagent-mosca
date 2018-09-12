@@ -11,10 +11,8 @@ iota.init();
 // Once a MQTT client is authorized by the server, 
 // its corresponding dojot device is added to the cache
 // and kept there while the client is connected.
-// The clientId which MUST match the pattern tenant/deviceId
+// The clientId which MUST match the pattern tenant:deviceId
 // is used as the cache's key.
-//
-// TODO: Replace the map by a list of connected device Ids?
 const cache = new Map(); 
 
 // Mosca Settings
@@ -30,13 +28,7 @@ var mosca_backend = {
 };
 
 // MQTT with TLS and client certificate
-if (config.mosca_tls === 'true') {
-
-  // TODO: move to config.js
-  // TODO: change names from mosquitto* to mosca*
-  var SECURE_CERT = '/opt/mosca/certs/mosquitto.crt';
-  var SECURE_KEY = '/opt/mosca/certs/mosquitto.key';
-  var CA_CERT = '/opt/mosca/certs/ca.crt';
+if (config.mosca_tls.enabled === 'true') {
 
   moscaSettings = {
     backend: mosca_backend,
@@ -47,9 +39,9 @@ if (config.mosca_tls === 'true') {
     type: "mqtts", // important to only use mqtts, not mqtt
     credentials:
     { // contains all security information
-      keyPath: SECURE_KEY,
-      certPath: SECURE_CERT,
-      caPaths: [CA_CERT],
+      keyPath: config.mosca_tls.key,
+      certPath: config.mosca_tls.cert,
+      caPaths: [config.mosca_tls.ca],
       requestCert: true, // enable requesting certificate from clients
       rejectUnauthorized: true // only accept clients with valid certificate
     },
@@ -85,10 +77,10 @@ server.on('ready', () => {
 })
 
 // Helper Function to parse MQTT clientId
-// (pattern: clientId = tenant/deviceId)
+// (pattern: clientId = tenant:deviceId)
 function parseClientId(clientId) {
   if (clientId && (typeof clientId === 'string')) {
-    let parsedData = clientId.match(/^(\w+)\/(\w+)$/);
+    let parsedData = clientId.match(/^(\w+):(\w+)$/);
     if (parsedData) {
       return { tenant: parsedData[1], device: parsedData[2] };
     }
@@ -99,7 +91,7 @@ function parseClientId(clientId) {
 function authenticate(client, username, password, callback) {
   console.log('Authenticating MQTT client', client.id);
 
-  // Condition 1: client.id follows the pattern tenant/deviceId
+  // Condition 1: client.id follows the pattern tenant:deviceId
   // Get tenant and deviceId from client.id
   let ids = parseClientId(client.id);
   if (!ids) {
@@ -112,7 +104,7 @@ function authenticate(client, username, password, callback) {
   // Condition 2: Client certificate belongs to the
   // device identified in the clientId
   // TODO: the clientId must contain the tenant too!
-  if (config.mosca_tls === 'true') {
+  if (config.mosca_tls.enabled === 'true') {
     clientCertificate = client.connection.stream.getPeerCertificate();
     if (!clientCertificate.hasOwnProperty('subject') ||
       !clientCertificate.subject.hasOwnProperty('CN') ||
@@ -146,13 +138,6 @@ function authorizePublish(client, topic, payload, callback) {
   let ids = parseClientId(client.id);
   let expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
 
-  // Once we accept only topics without starting slashes (such as admin/efac/attrs)
-  // this code adds backward compatibility.
-  // if (topic.startsWith('/')) {
-  //   console.error('deprecated - topic should not starts with slash.');
-  //   expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
-  // }
-
   console.log(`Expected topic is ${expectedTopic}`);
   console.log(`Device published on topic ${topic}`);
   if (topic === expectedTopic) {
@@ -175,13 +160,6 @@ function authorizeSubscribe(client, topic, callback) {
   let ids = parseClientId(client.id);
   let expectedTopic = `/${ids.tenant}/${ids.device}/config`;
 
-  // Once we accept only topics without starting slashes (such as admin/efac/attrs)
-  // this code adds backward compatibility.
-  // if (topic.startsWith('/')) {
-  //   console.error('deprecated - topic should not starts with slash.');
-  //   expectedTopic = `/${ids.tenant}/${ids.device}/config`;
-  // } 
-
   if (topic === expectedTopic) {
     // authorize
     callback(null, true);
@@ -203,7 +181,8 @@ server.on('clientConnected', function (client) {
 // Fired when a client disconnects from mosca server
 server.on('clientDisconnected', function (client) {
   console.log('client down', client.id);
-  //TODO: notify dojot that device is offline?
+  // delete device from cache
+  cache.delete(client.id);
 });
 
 // Fired when a message is received by mosca server
@@ -275,7 +254,7 @@ iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
   let topic = `/${tenant}/${deviceId}/config`;
 
   // device
-  let cacheEntry = cache.get(`${tenant}/${deviceId}`);
+  let cacheEntry = cache.get(`${tenant}:${deviceId}`);
   if (cacheEntry) {
     let message = {
       'topic': topic,
@@ -300,13 +279,13 @@ iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
 const deleteAndDisconnectCacheDevice = (event) => {
   const id = event.data.id;
   const tenant = event.meta.service;
-  let cacheEntry = cache.get(`${tenant}/${id}`);
+  let cacheEntry = cache.get(`${tenant}:${id}`);
   if (cacheEntry) {
-    let { client } = cache.get(`${tenant}/${id}`);
+    let { client } = cache.get(`${tenant}:${id}`);
     if (client) {
       client.close();
     }
-    cache.delete(`${tenant}/${id}`);
+    cache.delete(`${tenant}:${id}`);
   }
 }
 
