@@ -69,42 +69,21 @@ var server = new mosca.Server(moscaSettings);
 server.on('ready', () => {
   console.log('Mosca server is up and running');
   // callbacks
-  if (config.mosca_tls.enabled === 'true') {
-    server.authenticate = authenticate;
-  }
+  server.authenticate = authenticate;
   // Always check whether device is doing the right thing.
   server.authorizePublish = authorizePublish;
   server.authorizeSubscribe = authorizeSubscribe;
 });
 
-function setCache(device, tenant, client, callback) {
-  console.log(`device ${device}`)
-  console.log(`tenant ${tenant}`)
-  iota.getDevice(device, tenant).then((response) => {
-    // add device to cache
-    console.log('Will add client in cache');
-    cache.set(client.id, { client });
-    //authorize client connection
-    callback(null, true);
-    console.log('Connection authorized for', `${tenant}/${device}`);
-  }).catch((error) => {
-    //reject client connection
-    console.log(error);
-    callback(null, false);
-    console.log(`Connection rejected for ${tenant}/${device}. Device doesn't exist in dojot.`);
-  })
-}
-
 // Helper Function to parse MQTT clientId
 function parseClientId(clientId, topic) {
-  if (config.mosca_tls.enabled === 'true') {
-    if (clientId && (typeof clientId === 'string')) {
-      let parsedData = clientId.match(/^(\w+):(\w+)$/);
-      if (parsedData) {
-        return { tenant: parsedData[1], device: parsedData[2] };
-      }
+  if (clientId && (typeof clientId === 'string')) {
+    let parsedData = clientId.match(/^(\w+):(\w+)$/);
+    if (parsedData) {
+      return { tenant: parsedData[1], device: parsedData[2] };
     }
   }
+
   // If we're here, it means that TLS is not configured
   // so fallback to topic-based id scheme
   result = topic.match(/^\/([^/]+)\/([^/]+)/)
@@ -118,6 +97,7 @@ function parseClientId(clientId, topic) {
 // Function to authenticate the MQTT client
 function authenticate(client, username, password, callback) {
   console.log('Authenticating MQTT client', client.id);
+
   // Condition 1: client.id follows the pattern tenant:deviceId
   // Get tenant and deviceId from client.id
   let ids = parseClientId(client.id);
@@ -131,18 +111,30 @@ function authenticate(client, username, password, callback) {
   // Condition 2: Client certificate belongs to the
   // device identified in the clientId
   // TODO: the clientId must contain the tenant too!
-  clientCertificate = client.connection.stream.getPeerCertificate();
-  if (!clientCertificate.hasOwnProperty('subject') ||
-    !clientCertificate.subject.hasOwnProperty('CN') ||
-    clientCertificate.subject.CN !== ids.device) {
-    //reject client connection
-    callback(null, false);
-    console.log(`Connection rejected for ${client.id}. Invalid client certificate.`);
-    return;
+  if (config.mosca_tls.enabled === 'true') {
+    clientCertificate = client.connection.stream.getPeerCertificate();
+    if (!clientCertificate.hasOwnProperty('subject') ||
+      !clientCertificate.subject.hasOwnProperty('CN') ||
+      clientCertificate.subject.CN !== ids.device) {
+      //reject client connection
+      callback(null, false);
+      console.log(`Connection rejected for ${client.id}. Invalid client certificate.`);
+      return;
+    }
   }
 
   // Condition 3: Device exists in dojot
-  setCache(ids.device, ids.tenant, client, callback);
+  iota.getDevice(ids.device, ids.tenant).then((device) => {
+    // add device to cache
+    cache.set(client.id, { client });
+    //authorize client connection
+    callback(null, true);
+    console.log('Connection authorized for', client.id);
+  }).catch((error) => {
+    //reject client connection
+    callback(null, false);
+    console.log(`Connection rejected for ${client.id}. Device doesn't exist in dojot.`);
+  })
 }
 
 // Function to authourize client to publish to
@@ -155,7 +147,6 @@ function authorizePublish(client, topic, payload, callback) {
     callback(null, false);
     console.log(`Rejected client ${client.id} to publish to topic ${topic}`);
   }
-  setCache(ids.device, ids.tenant, client, callback);
   let expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
 
   console.log(`Expected topic is ${expectedTopic}`);
@@ -184,7 +175,7 @@ function authorizeSubscribe(client, topic, callback) {
     console.log(`Connection rejected for ${client.id}. Invalid clientId.`);
     return;
   }
-  setCache(ids.device, ids.tenant, client, callback);
+
   let expectedTopic = `/${ids.tenant}/${ids.device}/config`;
 
   if (topic === expectedTopic) {
