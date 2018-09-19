@@ -77,12 +77,14 @@ server.on('ready', () => {
 })
 
 // Helper Function to parse MQTT clientId
-// (pattern: clientId = tenant:deviceId)
+// if you are using TLS (pattern: clientId = tenant:deviceId)
 function parseClientId(clientId) {
-  if (clientId && (typeof clientId === 'string')) {
-    let parsedData = clientId.match(/^(\w+):(\w+)$/);
-    if (parsedData) {
-      return { tenant: parsedData[1], device: parsedData[2] };
+  if (config.mosca_tls.enabled === 'true') {
+    if (clientId && (typeof clientId === 'string')) {
+      let parsedData = clientId.match(/^(\w+):(\w+)$/);
+      if (parsedData) {
+        return { tenant: parsedData[1], device: parsedData[2] };
+      }
     }
   }
 }
