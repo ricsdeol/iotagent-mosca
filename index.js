@@ -69,7 +69,9 @@ var server = new mosca.Server(moscaSettings);
 server.on('ready', () => {
   console.log('Mosca server is up and running');
   // callbacks
-  server.authenticate = authenticate;
+  if (config.mosca_tls.enabled === 'true') {
+    server.authenticate = authenticate;
+  }
   // Always check whether device is doing the right thing.
   server.authorizePublish = authorizePublish;
   server.authorizeSubscribe = authorizeSubscribe;
@@ -88,10 +90,20 @@ function parseClientId(clientId, topic) {
   // so fallback to topic-based id scheme
   result = topic.match(/^\/([^/]+)\/([^/]+)/)
   if (result) {
-    console.log(`will attempt to use topic as id source ${result}`);
-    return ({ tenant: result[1], device: result[2] });
+    let exist = false;
+    console.log(`will attempt to use topic as tenant source ${result}`);
+    exist = iota.messenger.tenants.some((tenant) => {
+      if (result[1] === tenant) {
+        return true;
+      }
+    });
+    if (exist) {
+      return ({ tenant: result[1], device: result[2] });
+    }
+    console.log(`invalid tenant: ${result[1]}`);
+    return;
   }
-
+  return;
 }
 
 // Function to authenticate the MQTT client
@@ -146,6 +158,7 @@ function authorizePublish(client, topic, payload, callback) {
   if (!ids) {
     callback(null, false);
     console.log(`Rejected client ${client.id} to publish to topic ${topic}`);
+    return;
   }
   let expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
 
@@ -260,7 +273,6 @@ server.on('published', function (packet, client) {
 // (from dojot to device)
 iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
   console.log('Got configure event from Device Manager', event)
-
   // device id
   let deviceId = event.data.id;
   delete event.data.id;
