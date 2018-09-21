@@ -13,7 +13,7 @@ iota.init();
 // and kept there while the client is connected.
 // The clientId which MUST match the pattern tenant:deviceId
 // is used as the cache's key.
-const cache = new Map(); 
+const cache = new Map();
 
 // Mosca Settings
 var moscaSettings = {};
@@ -68,32 +68,51 @@ var server = new mosca.Server(moscaSettings);
 // Fired when mosca server is ready
 server.on('ready', () => {
   console.log('Mosca server is up and running');
-
   // callbacks
-  server.authenticate = authenticate;
+  if (config.mosca_tls.enabled === 'true') {
+    server.authenticate = authenticate;
+  }
   // Always check whether device is doing the right thing.
   server.authorizePublish = authorizePublish;
   server.authorizeSubscribe = authorizeSubscribe;
-})
+});
 
 // Helper Function to parse MQTT clientId
-// (pattern: clientId = tenant:deviceId)
-function parseClientId(clientId) {
+function parseClientIdOrTopic(clientId, topic) {
   if (clientId && (typeof clientId === 'string')) {
     let parsedData = clientId.match(/^(\w+):(\w+)$/);
     if (parsedData) {
       return { tenant: parsedData[1], device: parsedData[2] };
     }
   }
+
+  // If we're here, it means that TLS is not configured
+  // so fallback to topic-based id scheme
+  result = topic.match(/^\/([^/]+)\/([^/]+)/)
+  if (result) {
+    let exist = false;
+    console.log(`will attempt to use topic as tenant source ${result}`);
+    exist = iota.messenger.tenants.some((tenant) => {
+      if (result[1] === tenant) {
+        return true;
+      }
+    });
+    if (exist) {
+      return ({ tenant: result[1], device: result[2] });
+    }
+    console.log(`invalid tenant: ${result[1]}`);
+    return;
+  }
+  return;
 }
 
-// Function to authenticate the MQTT client 
+// Function to authenticate the MQTT client
 function authenticate(client, username, password, callback) {
   console.log('Authenticating MQTT client', client.id);
 
   // Condition 1: client.id follows the pattern tenant:deviceId
   // Get tenant and deviceId from client.id
-  let ids = parseClientId(client.id);
+  let ids = parseClientIdOrTopic(client.id);
   if (!ids) {
     //reject client connection
     callback(null, false);
@@ -135,7 +154,12 @@ function authenticate(client, username, password, callback) {
 function authorizePublish(client, topic, payload, callback) {
   console.log(`Authorizing MQTT client ${client.id} to publish to ${topic}`);
 
-  let ids = parseClientId(client.id);
+  let ids = parseClientIdOrTopic(client.id, topic);
+  if (!ids) {
+    callback(null, false);
+    console.log(`Rejected client ${client.id} to publish to topic ${topic}`);
+    return;
+  }
   let expectedTopic = `/${ids.tenant}/${ids.device}/attrs`;
 
   console.log(`Expected topic is ${expectedTopic}`);
@@ -157,7 +181,14 @@ function authorizePublish(client, topic, payload, callback) {
 function authorizeSubscribe(client, topic, callback) {
   console.log(`Authorizing client ${client.id} to subscribe to ${topic}`);
 
-  let ids = parseClientId(client.id);
+  let ids = parseClientIdOrTopic(client.id, topic);
+  if (!ids) {
+    //reject client connection
+    callback(null, false);
+    console.log(`Connection rejected for ${client.id}. Invalid clientId.`);
+    return;
+  }
+
   let expectedTopic = `/${ids.tenant}/${ids.device}/config`;
 
   if (topic === expectedTopic) {
@@ -234,7 +265,7 @@ server.on('published', function (packet, client) {
     }
   }
   //send data to dojot broker
-  let ids = parseClientId(client.id);
+  let ids = parseClientIdOrTopic(client.id, packet.topic);
   iota.updateAttrs(ids.device, ids.tenant, data, metadata);
 });
 
@@ -242,7 +273,6 @@ server.on('published', function (packet, client) {
 // (from dojot to device)
 iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
   console.log('Got configure event from Device Manager', event)
-
   // device id
   let deviceId = event.data.id;
   delete event.data.id;
