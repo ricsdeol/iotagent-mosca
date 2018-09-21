@@ -78,7 +78,7 @@ server.on('ready', () => {
 });
 
 // Helper Function to parse MQTT clientId
-function parseClientId(clientId, topic) {
+function parseClientIdOrTopic(clientId, topic) {
   if (clientId && (typeof clientId === 'string')) {
     let parsedData = clientId.match(/^(\w+):(\w+)$/);
     if (parsedData) {
@@ -112,7 +112,7 @@ function authenticate(client, username, password, callback) {
 
   // Condition 1: client.id follows the pattern tenant:deviceId
   // Get tenant and deviceId from client.id
-  let ids = parseClientId(client.id);
+  let ids = parseClientIdOrTopic(client.id);
   if (!ids) {
     //reject client connection
     callback(null, false);
@@ -154,7 +154,7 @@ function authenticate(client, username, password, callback) {
 function authorizePublish(client, topic, payload, callback) {
   console.log(`Authorizing MQTT client ${client.id} to publish to ${topic}`);
 
-  let ids = parseClientId(client.id, topic);
+  let ids = parseClientIdOrTopic(client.id, topic);
   if (!ids) {
     callback(null, false);
     console.log(`Rejected client ${client.id} to publish to topic ${topic}`);
@@ -181,7 +181,7 @@ function authorizePublish(client, topic, payload, callback) {
 function authorizeSubscribe(client, topic, callback) {
   console.log(`Authorizing client ${client.id} to subscribe to ${topic}`);
 
-  let ids = parseClientId(client.id, topic);
+  let ids = parseClientIdOrTopic(client.id, topic);
   if (!ids) {
     //reject client connection
     callback(null, false);
@@ -265,7 +265,7 @@ server.on('published', function (packet, client) {
     }
   }
   //send data to dojot broker
-  let ids = parseClientId(client.id, packet.topic);
+  let ids = parseClientIdOrTopic(client.id, packet.topic);
   iota.updateAttrs(ids.device, ids.tenant, data, metadata);
 });
 
