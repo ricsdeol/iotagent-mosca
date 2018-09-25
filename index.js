@@ -1,3 +1,4 @@
+#!/usr/bin/node
 var mosca = require('mosca');
 var iotalib = require('@dojot/iotagent-nodejs');
 var dojotLogger = require("@dojot/dojot-module-logger");

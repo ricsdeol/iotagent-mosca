@@ -1,8 +1,9 @@
 {
-  "name": "dojot.iotagent.mosca",
-  "version": "1.0.0",
+  "name": "@dojot/iotagent-mqtt",
+  "version": "0.3.0-beta.1",
   "description": "",
   "main": "index.js",
+  "bin": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
