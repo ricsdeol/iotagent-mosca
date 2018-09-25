@@ -300,25 +300,25 @@ iota.messenger.on('iotagent.device', 'device.configure', (tenant, event) => {
   let topic = `/${tenant}/${deviceId}/config`;
 
   // device
-  let cacheEntry = cache.get(`${tenant}:${deviceId}`);
-  if (cacheEntry) {
-    let message = {
-      'topic': topic,
-      'payload': JSON.stringify(event.data.attrs),
-      'qos': 0,
-      'retain': false
-    };
+  // let cacheEntry = cache.get(`${tenant}:${deviceId}`);
+  // if (cacheEntry) {
+  let message = {
+    'topic': topic,
+    'payload': JSON.stringify(event.data.attrs),
+    'qos': 0,
+    'retain': false
+  };
 
-    // send data to device
-    logger.debug('Publishing', message)
-    server.publish(message, () => { logger.debug('Message out!!') });
+  // send data to device
+  logger.debug('Publishing', message)
+  server.publish(message, () => { logger.debug('Message out!!') });
 
     // TODO: send message/state(=sent) to history
-  }
-  else {
-    logger.debug(`Discading event because device is disconnected`);
-    // TODO: send message/state(=discarded) to history
-  }
+  // }
+  // else {
+  //   logger.debug(`Discading event because device is disconnected`);
+  //   // TODO: send message/state(=discarded) to history
+  // }
 
 });
 
