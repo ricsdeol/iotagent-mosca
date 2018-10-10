@@ -250,6 +250,7 @@ server.on('published', function (packet, client) {
   }
   catch (e) {
     logger.warn('Payload is not valid JSON. Ignoring.', packet.payload.toString(), e);
+    return;
   }
 
   logger.debug('Published', packet.topic, data, client.id);
