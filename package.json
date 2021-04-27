@@ -13,7 +13,7 @@
     "@dojot/iotagent-nodejs": "2.0.0-alpha.4",
     "@dojot/dojot-module-logger": "0.0.1-alpha.1",
     "mosca": "^2.8.0",
-    "redis": "^2.8.0",
+    "redis": "^3.1.1",
     "express": "4.16.3"
   }
 }
